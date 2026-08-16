@@ -55,10 +55,9 @@ sources:
 # Section 2: Agentic Scraping Workflow parameters
 # ---------------------------------------------------------------------
 crawl:
-  frequency: "weekly"          # SOP: Monday 08:00 IST
-  schedule_cron: "0 8 * * 1"   # cron syntax, IST — see scheduler.py
-  timezone: "Asia/Kolkata"
-  lookback_days: 7             # "review the scraped text from the last 7 days"
+  frequency: "daily"          # SOP: Monday 08:00 IST
+  schedule_cron: "30 2 * * *"   # cron syntax, IST — see scheduler.py
+  lookback_days: 1            # "review the scraped text from the last 7 days"
   parsing_depth: 2             # Home page -> Article page (full text, not just headlines)
   max_articles_per_source: 40
   request_timeout_seconds: 20
