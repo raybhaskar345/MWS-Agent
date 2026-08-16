@@ -1,0 +1,174 @@
+# =====================================================================
+# MWS Industrial Intelligence Agent — Configuration
+# Implements SOP: "Deploying Industrial Intelligence Agents"
+# =====================================================================
+
+# ---------------------------------------------------------------------
+# Section 1: Project Scoping and Source Definition
+# ---------------------------------------------------------------------
+# Each source needs at least one working RSS feed OR a section URL to
+# crawl. RSS is strongly preferred (Section 6: avoids paywall/bot-block
+# issues). Fill in / correct the URLs below for your actual access —
+# placeholders are marked TODO.
+sources:
+  - name: "Business Standard"
+    verticals: ["Companies", "Economy"]
+    rss_feeds:
+      - "https://www.business-standard.com/rss/companies-101.rss"
+      - "https://www.business-standard.com/rss/economy-102.rss"
+    section_urls: []
+    notes: "Known to have bot-detection / paywall — monitor Source Health (Sec. 6)."
+
+  - name: "Industry Today"
+    verticals: ["Manufacturing", "Sustainability"]
+    rss_feeds: []
+    section_urls:
+      - "https://industry.today/category/manufacturing/"
+      - "https://industry.today/category/sustainability/"
+    notes: "No public RSS found at setup time — verify and replace section_urls."
+
+  - name: "Indian Infrastructure Research"
+    verticals: ["Water", "Power", "Industry"]
+    rss_feeds: []
+    section_urls:
+      - "https://indianinfrastructure.com/category/water/"
+      - "https://indianinfrastructure.com/category/power/"
+    notes: "Reports-based site — likely needs manual URL confirmation."
+
+  - name: "CPCB Public Notices"
+    verticals: ["Compliance Notices"]
+    rss_feeds: []
+    section_urls:
+      - "https://cpcb.nic.in/public-notice/"
+    optional: true
+    notes: "Optional per SOP Section 1. Enable once URL confirmed."
+
+  - name: "NGT Portal"
+    verticals: ["Judgments", "Orders"]
+    rss_feeds: []
+    section_urls:
+      - "https://greentribunal.gov.in/"
+    optional: true
+    notes: "Optional per SOP Section 1. Enable once URL confirmed."
+
+# ---------------------------------------------------------------------
+# Section 2: Agentic Scraping Workflow parameters
+# ---------------------------------------------------------------------
+crawl:
+  frequency: "weekly"          # SOP: Monday 08:00 IST
+  schedule_cron: "0 8 * * 1"   # cron syntax, IST — see scheduler.py
+  timezone: "Asia/Kolkata"
+  lookback_days: 7             # "review the scraped text from the last 7 days"
+  parsing_depth: 2             # Home page -> Article page (full text, not just headlines)
+  max_articles_per_source: 40
+  request_timeout_seconds: 20
+  request_delay_seconds: 1.5   # politeness delay between requests
+  user_agent: "Mozilla/5.0 (compatible; MWS-IntelAgent/1.0; +contact-your-admin)"
+
+# ---------------------------------------------------------------------
+# Section 3: Use Case Classification Matrix
+# ---------------------------------------------------------------------
+system_prompt: >
+  You are an Industrial Business Intelligence Analyst. Your task is to
+  review the scraped text from the last 7 days and identify specific
+  business use cases. For each relevant article, extract: Company Name,
+  Sector, Location (if mentioned), and the specific 'Pain Point' or
+  'Opportunity' identified. Classify each finding into exactly one of
+  the categories in the classification matrix provided. If an article
+  is generic economic/business news with no specific actionable
+  company-level signal, mark it as NOT RELEVANT and exclude it from
+  the final output.
+
+classification_matrix:
+  - category: "Environmental Compliance"
+    keywords: ["CPCB", "NGT", "penalty", "ETP", "groundwater", "violation",
+               "Effluent Treatment", "Groundwater Illegal", "Compliance Failure"]
+    logic: >
+      Focus on manufacturing units failing discharge norms or illegal
+      water extraction.
+    severity_note: "Treat confirmed penalties/fines as CRITICAL for alerting (Section 5)."
+
+  - category: "Water Scarcity"
+    keywords: ["Water stress", "seasonal shortage", "drought", "intake limit",
+               "Water Shortage", "Zero Liquid Discharge", "Surface Water Intake"]
+    logic: >
+      Look for industries reporting production cuts due to seasonal
+      water unavailability.
+
+  - category: "Rapid Expansion"
+    keywords: ["Datacenter", "microelectronics", "semiconductor", "ramp-up",
+               "Capacity Expansion", "Cleanroom", "Fast-track Project", "Hyperscale"]
+    logic: >
+      Identify projects with 'stringent' or 'aggressive' execution
+      timelines.
+
+  - category: "Monetary Loss"
+    keywords: ["Delayed commissioning", "maintenance cost", "revenue loss",
+               "Revenue Leakage", "Idle Capacity", "O&M Overrun", "Delayed Start"]
+    logic: >
+      Focus on utilities or industries facing heavy penalties for
+      project delays.
+
+  - category: "Ultrapure Quality"
+    keywords: ["Demin water quality", "Boiler Feed Quality",
+               "Cooling tower Feed Quality", "Ultrapure water quality",
+               "Chip fabrication", "Assembly and testing"]
+    logic: >
+      Focus on industry with extremely pure or high quality standard
+      requirement such as Semiconductor chip-based Microelectronics
+      Industry.
+
+  - category: "Deferment of Capital Costs"
+    keywords: ["Rental model", "bridge contracts", "BOO contracts",
+               "plug-and-play rental assets", "Emergency contracts",
+               "Long term Service Agreement"]
+    logic: >
+      Focus on industry with paying capacity but who look to defer on
+      capital payments and prefer rental assets that can be quickly
+      deployed and decommissioned with limited ownership prospects.
+
+# ---------------------------------------------------------------------
+# Section 4: Semantic search keyword lists (used as retrieval hints /
+# pre-filter before the LLM classification pass)
+# ---------------------------------------------------------------------
+semantic_keyword_lists:
+  a: ["CPCB", "NGT", "Effluent Treatment", "Groundwater Illegal", "Compliance Failure"]
+  b: ["Water Shortage", "Zero Liquid Discharge", "Surface Water Intake"]
+  c: ["Capacity Expansion", "Cleanroom", "Fast-track Project", "Hyperscale"]
+  d: ["Revenue Leakage", "Idle Capacity", "O&M Overrun", "Delayed Start"]
+
+# ---------------------------------------------------------------------
+# Section 5: Output and Notification Integration
+# ---------------------------------------------------------------------
+output:
+  format: "markdown_table"          # "markdown_table" or "csv" or "both"
+  output_dir: "output"
+  filename_pattern: "weekly_intel_{date}.md"
+
+delivery:
+  email:
+    enabled: false               # set true and fill in SMTP + recipients to activate
+    smtp_host: "TODO"
+    smtp_port: 587
+    smtp_user: "TODO"
+    smtp_password_env_var: "MWS_SMTP_PASSWORD"   # read from environment, never hardcode
+    recipients:
+      - "TODO: person@company.com"
+    subject_pattern: "MWS Weekly Industrial Intelligence — {date}"
+
+  drive:
+    enabled: false               # requires Google Drive API credentials
+    folder_id: "TODO"
+
+  slack:
+    enabled: false
+    webhook_url_env_var: "MWS_SLACK_WEBHOOK_URL"
+    alert_on_categories: ["Environmental Compliance"]
+    alert_only_if: "critical"    # per SOP: "Post a high-level alert for any 'Critical' compliance penalties"
+
+# ---------------------------------------------------------------------
+# Section 6: Review and Refinement
+# ---------------------------------------------------------------------
+review:
+  log_false_positive_candidates: true
+  log_source_failures: true
