@@ -9,11 +9,22 @@ Use Case Classification Matrix. A cheap keyword pre-filter (Section 4's
 LLM pass, to save on API calls for obviously irrelevant articles.
 
 Get a free API key at: https://aistudio.google.com/apikey
+
+MODEL NOTE: Google frequently retires specific dated model IDs (e.g.
+gemini-2.5-flash was cut off for new API keys well ahead of its official
+shutdown date). To avoid this breaking the agent again, this file targets
+the "gemini-flash-latest" alias, which Google automatically points at
+its current flash-tier model — no code change needed when they release a
+new version. If you ever see a 404 "model no longer available" error
+again despite this, check https://ai.google.dev/gemini-api/docs/models
+for the current alias name and update MODEL below.
+
 Free tier limits (check current values at ai.google.dev/pricing before
-relying on them — they change): as of setup time, Gemini 2.5 Flash has a
-free per-minute and per-day request cap on API-key access. If you exceed
+relying on them — they change and have been cut significantly over time,
+sometimes down to ~15-20 requests/day on some accounts). If you exceed
 it, calls will 429; the _classify_article retry/backoff below handles
-transient limit hits.
+transient limit hits, but a very tight daily cap may require spacing
+runs out further or upgrading to a low-cost paid tier.
 """
 
 import json
@@ -30,8 +41,10 @@ from scraper import Article
 
 logger = logging.getLogger("mws_agent.analyzer")
 
-# "flash" is the free-tier-friendly model — fast and cheap/free vs "pro".
-MODEL = "gemini-2.5-flash"
+# "gemini-flash-latest" is an alias Google keeps pointed at their current
+# flash-tier model, so this doesn't break every time a dated model ID
+# (like gemini-2.5-flash) gets retired. Free-tier friendly vs. "pro".
+MODEL = "gemini-flash-latest"
 
 
 @dataclass
@@ -101,6 +114,11 @@ class Analyzer:
             try:
                 results = self._classify_article(article)
                 findings.extend(results)
+            except RuntimeError as e:
+                # Raised by _classify_article for config-level problems (e.g. a
+                # retired model ID) that won't resolve by trying more articles.
+                logger.error("Stopping run: %s", e)
+                raise
             except Exception as e:
                 logger.error("LLM classification failed for %s: %s", article.url, e)
             # Free-tier rate limits are the main constraint with Gemini —
@@ -134,6 +152,19 @@ class Analyzer:
 
             except Exception as e:
                 last_error = e
+                error_str = str(e)
+
+                # A 404 here almost always means Google retired this model ID —
+                # this is a config problem, not a per-article problem, so fail
+                # loudly immediately instead of retrying/burning through articles.
+                if "404" in error_str and ("NOT_FOUND" in error_str or "no longer available" in error_str):
+                    raise RuntimeError(
+                        f"Gemini model '{MODEL}' appears to have been retired by Google "
+                        f"(404 NOT_FOUND). Check https://ai.google.dev/gemini-api/docs/models "
+                        f"for the current model alias and update MODEL in analyzer.py. "
+                        f"Original error: {error_str}"
+                    ) from e
+
                 # Gemini free tier commonly hits 429 (rate limit) — back off and retry.
                 if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
                     wait = 15 * (attempt + 1)

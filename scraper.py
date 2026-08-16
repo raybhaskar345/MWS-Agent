@@ -143,7 +143,19 @@ class SourceScraper:
         return results
 
     def _extract_article_links(self, soup: BeautifulSoup, base_url: str) -> list[dict]:
-        """Heuristic link extraction for depth-2 crawling of a section/listing page."""
+        """Heuristic link extraction for depth-2 crawling of a section/listing page.
+
+        Filters out category/tag/archive/author pages, which are easy to
+        mistake for articles since their link text is often long enough to
+        pass a naive length check (e.g. "25 Years of Indian Infrastructure",
+        "Ports & Shipping News" are category names, not article headlines).
+        """
+        # URL path segments that indicate a listing/index page, not an article.
+        non_article_path_markers = (
+            "/category/", "/categories/", "/tag/", "/tags/", "/author/",
+            "/page/", "/archive", "/section/", "/topic/", "/topics/",
+        )
+
         candidates = []
         seen = set()
         for a in soup.find_all("a", href=True):
@@ -152,6 +164,17 @@ class SourceScraper:
             if not title or len(title) < 15:
                 continue  # skip nav/menu links
             full_url = urljoin(base_url, href)
+
+            # Skip listing/index pages masquerading as articles.
+            lower_url = full_url.lower()
+            if any(marker in lower_url for marker in non_article_path_markers):
+                continue
+            # Skip bare year/month archive paths like /2026/08/
+            path = full_url.split(base_url.split("//", 1)[-1].split("/", 1)[0], 1)[-1]
+            path_parts = [p for p in path.strip("/").split("/") if p]
+            if path_parts and all(p.isdigit() for p in path_parts):
+                continue
+
             if full_url in seen:
                 continue
             seen.add(full_url)
@@ -214,5 +237,26 @@ class SourceScraper:
         return any(u.strip().upper().startswith("TODO") for u in urls) or not urls
 
     def _record_failure(self, source_name: str, url: str, detail: str) -> None:
-        logger.warning("Source health issue [%s] %s -> %s", source_name, url, detail)
-        self.failures.append({"source": source_name, "url": url, "detail": detail})
+        is_ssl_issue = "CERTIFICATE_VERIFY_FAILED" in detail or "SSLError" in detail
+
+        if is_ssl_issue:
+            # This is a known condition on the target site (expired/misconfigured
+            # cert on their end), not something wrong with our scraper. We
+            # deliberately do NOT bypass SSL verification to fetch anyway —
+            # that would accept unverified connections and is not worth the
+            # risk for an optional/secondary source. Log calmly, not as a
+            # scraper bug, and note it distinctly in the report.
+            logger.info(
+                "Source '%s' has an SSL certificate problem on their end (skipping, not retrying): %s",
+                source_name, url,
+            )
+            detail = f"SSL certificate issue on target site (not a scraper bug): {detail}"
+        else:
+            logger.warning("Source health issue [%s] %s -> %s", source_name, url, detail)
+
+        self.failures.append({
+            "source": source_name,
+            "url": url,
+            "detail": detail,
+            "category": "ssl_certificate" if is_ssl_issue else "other",
+        })

@@ -35,14 +35,20 @@ free tier), then set it as an environment variable:
 export GEMINI_API_KEY="your-key-here"
 ```
 
-**Free tier note:** Gemini 2.5 Flash's free tier has per-minute and per-day
-request caps (check current numbers at https://ai.google.dev/pricing since
-they change). The agent already adds a delay between calls and retries with
-backoff on rate-limit errors, but if you have a large number of articles in
-a given week, a run may take longer than an equivalent paid-tier run, or
-you may need to split it across a day. If you outgrow the free tier,
-`analyzer.py` isolates all the model-calling logic in one file, so swapping
-back to Claude or another provider later only requires editing that file.
+**Free tier note:** Gemini's free tier has per-minute and per-day request
+caps that Google has cut significantly over time (in some cases down to
+roughly 15-20 requests/day on certain accounts as of mid-2026) — check
+current numbers at https://ai.google.dev/gemini-api/docs/models before
+relying on them. The agent already adds a delay between calls and retries
+with backoff on rate-limit errors. It also targets the
+`gemini-flash-latest` alias rather than a dated model ID, since Google
+periodically retires specific versions (this happened once already during
+setup) — the alias auto-points to their current flash model so this
+shouldn't need a code change again. If it ever does 404 with a "model no
+longer available" error, check that models page for the current alias
+name and update `MODEL` in `analyzer.py`. If you outgrow the free tier
+entirely, `analyzer.py` isolates all the model-calling logic in one file,
+so swapping providers later only requires editing that file.
 
 ### 1. Fill in real source URLs
 Open `config.yaml` and replace every `TODO: ...` URL under `sources:` with

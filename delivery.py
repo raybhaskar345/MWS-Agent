@@ -47,11 +47,22 @@ def build_markdown_report(findings: list[Finding], run_date: str, source_failure
             lines.append("")
 
     if source_failures:
-        lines.append("## Source Health Issues (Section 6 review)")
-        lines.append("")
-        for fail in source_failures:
-            lines.append(f"- **{fail['source']}** — `{fail['url']}` — {fail['detail']}")
-        lines.append("")
+        actionable = [f for f in source_failures if f.get("category") != "ssl_certificate"]
+        ssl_issues = [f for f in source_failures if f.get("category") == "ssl_certificate"]
+
+        if actionable:
+            lines.append("## Source Health Issues (Section 6 review)")
+            lines.append("")
+            for fail in actionable:
+                lines.append(f"- **{fail['source']}** — `{fail['url']}` — {fail['detail']}")
+            lines.append("")
+
+        if ssl_issues:
+            lines.append("## Known site-side SSL issues (not a scraper bug — informational)")
+            lines.append("")
+            for fail in ssl_issues:
+                lines.append(f"- **{fail['source']}** — `{fail['url']}` — {fail['detail']}")
+            lines.append("")
 
     return "\n".join(lines)
 
