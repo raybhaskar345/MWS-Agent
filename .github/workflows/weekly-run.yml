@@ -1,0 +1,55 @@
+name: Weekly Industrial Intelligence Run
+
+# Runs automatically every Monday at 08:00 IST (02:30 UTC), and can also
+# be triggered manually from the Actions tab for testing.
+on:
+  schedule:
+    - cron: "30 2 * * 1"   # 02:30 UTC = 08:00 IST, every Monday
+  workflow_dispatch: {}     # adds a "Run workflow" button in the GitHub UI
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run the agent
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          MWS_SMTP_PASSWORD: ${{ secrets.MWS_SMTP_PASSWORD }}
+          MWS_SLACK_WEBHOOK_URL: ${{ secrets.MWS_SLACK_WEBHOOK_URL }}
+        run: python main.py
+
+      - name: Commit generated report back to repo
+        run: |
+          git config user.name "mws-agent-bot"
+          git config user.email "actions@github.com"
+          git add output/*.md
+          git diff --quiet --cached || git commit -m "Weekly intelligence report $(date +'%Y-%m-%d')"
+          git push
+
+      - name: Upload report as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-report
+          path: output/*.md
+          retention-days: 90
+
+      - name: Upload logs (for debugging failed runs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-logs
+          path: logs/*.log
+          retention-days: 30
