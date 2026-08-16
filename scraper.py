@@ -11,7 +11,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 import feedparser
@@ -149,12 +149,17 @@ class SourceScraper:
         mistake for articles since their link text is often long enough to
         pass a naive length check (e.g. "25 Years of Indian Infrastructure",
         "Ports & Shipping News" are category names, not article headlines).
+        Also filters out bare-homepage links and off-domain links, which are
+        almost always outbound sponsor/partner links picked up from sidebars
+        or footers, not actual articles from the source being crawled.
         """
         # URL path segments that indicate a listing/index page, not an article.
         non_article_path_markers = (
             "/category/", "/categories/", "/tag/", "/tags/", "/author/",
             "/page/", "/archive", "/section/", "/topic/", "/topics/",
         )
+
+        base_domain = urlparse(base_url).netloc.lower().removeprefix("www.")
 
         candidates = []
         seen = set()
@@ -164,14 +169,25 @@ class SourceScraper:
             if not title or len(title) < 15:
                 continue  # skip nav/menu links
             full_url = urljoin(base_url, href)
+            parsed = urlparse(full_url)
+
+            # Skip off-domain links entirely — outbound sponsor/partner links,
+            # not articles belonging to the source being crawled.
+            link_domain = parsed.netloc.lower().removeprefix("www.")
+            if link_domain != base_domain:
+                continue
+
+            # Skip bare-homepage links (no meaningful path) — these are
+            # almost never articles, just "visit our partner" style links.
+            if not parsed.path or parsed.path.strip("/") == "":
+                continue
 
             # Skip listing/index pages masquerading as articles.
             lower_url = full_url.lower()
             if any(marker in lower_url for marker in non_article_path_markers):
                 continue
             # Skip bare year/month archive paths like /2026/08/
-            path = full_url.split(base_url.split("//", 1)[-1].split("/", 1)[0], 1)[-1]
-            path_parts = [p for p in path.strip("/").split("/") if p]
+            path_parts = [p for p in parsed.path.strip("/").split("/") if p]
             if path_parts and all(p.isdigit() for p in path_parts):
                 continue
 

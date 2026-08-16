@@ -166,12 +166,23 @@ class Analyzer:
                     ) from e
 
                 # Gemini free tier commonly hits 429 (rate limit) — back off and retry.
-                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
                     wait = 15 * (attempt + 1)
                     logger.warning("Gemini rate limit hit, waiting %ds (attempt %d/%d)",
                                    wait, attempt + 1, retries)
                     time.sleep(wait)
                     continue
+
+                # 503 UNAVAILABLE means the model is transiently overloaded on
+                # Google's end — this is temporary and worth retrying, distinct
+                # from a rate-limit (429) or a genuinely broken request.
+                if "503" in error_str or "UNAVAILABLE" in error_str:
+                    wait = 10 * (attempt + 1)
+                    logger.warning("Gemini reported high demand (503), waiting %ds (attempt %d/%d)",
+                                   wait, attempt + 1, retries)
+                    time.sleep(wait)
+                    continue
+
                 raise
 
         logger.error("Gave up on %s after %d retries: %s", article.url, retries, last_error)
