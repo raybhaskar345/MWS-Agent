@@ -31,15 +31,15 @@ sources:
     verticals: ["Water", "Power", "Industry"]
     rss_feeds: []
     section_urls:
-      - "TODO: https://indianinfrastructure.com/category/water/"
-      - "TODO: https://indianinfrastructure.com/category/power/"
+      - "https://indianinfrastructure.com/category/water/"
+      - "https://indianinfrastructure.com/category/power/"
     notes: "Reports-based site — likely needs manual URL confirmation."
 
   - name: "CPCB Public Notices"
     verticals: ["Compliance Notices"]
     rss_feeds: []
     section_urls:
-      - "TODO: https://cpcb.nic.in/public-notice/"
+      - "https://cpcb.nic.in/public-notice/"
     optional: true
     notes: "Optional per SOP Section 1. Enable once URL confirmed."
 
@@ -47,7 +47,7 @@ sources:
     verticals: ["Judgments", "Orders"]
     rss_feeds: []
     section_urls:
-      - "TODO: https://greentribunal.gov.in/"
+      - "https://greentribunal.gov.in/"
     optional: true
     notes: "Optional per SOP Section 1. Enable once URL confirmed."
 
