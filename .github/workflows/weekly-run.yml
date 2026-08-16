@@ -1,10 +1,10 @@
-name: Weekly Industrial Intelligence Run
+name: Daily Industrial Intelligence Run
 
-# Runs automatically every Monday at 08:00 IST (02:30 UTC), and can also
+# Runs automatically every day at 08:00 IST (02:30 UTC), and can also
 # be triggered manually from the Actions tab for testing.
 on:
   schedule:
-    - cron: "30 2 * * 1"   # 02:30 UTC = 08:00 IST, every Monday
+    - cron: "30 2 * * *"   # 02:30 UTC = 08:00 IST, every day
   workflow_dispatch: {}     # adds a "Run workflow" button in the GitHub UI
 
 jobs:
@@ -36,13 +36,13 @@ jobs:
           git config user.name "mws-agent-bot"
           git config user.email "actions@github.com"
           git add output/*.md
-          git diff --quiet --cached || git commit -m "Weekly intelligence report $(date +'%Y-%m-%d')"
+          git diff --quiet --cached || git commit -m "Intelligence report $(date +'%Y-%m-%d')"
           git push
 
       - name: Upload report as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: weekly-report
+          name: intel-report
           path: output/*.md
           retention-days: 90
 
@@ -53,3 +53,5 @@ jobs:
           name: run-logs
           path: logs/*.log
           retention-days: 30
+
+
