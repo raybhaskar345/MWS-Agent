@@ -21,19 +21,35 @@ sources:
 
   - name: "Industry Today"
     verticals: ["Manufacturing", "Sustainability"]
-    rss_feeds: []
-    section_urls:
-      - "TODO: https://industry.today/category/manufacturing/"
-      - "TODO: https://industry.today/category/sustainability/"
-    notes: "No public RSS found at setup time — verify and replace section_urls."
+    rss_feeds:
+      - "https://industrytoday.com/category/manufacturing/feed"
+      - "https://industrytoday.com/category/articles/government-legislation/feed"
+    section_urls: []
+    notes: >
+      VERIFIED OUTPUTS XML FILE
 
   - name: "Indian Infrastructure Research"
     verticals: ["Water", "Power", "Industry"]
-    rss_feeds: []
-    section_urls:
-      - "https://indianinfrastructure.com/category/water/"
-      - "https://indianinfrastructure.com/category/power/"
-    notes: "Reports-based site — likely needs manual URL confirmation."
+    rss_feeds:
+      - "https://indianinfrastructure.com/category/water-waste/feed"
+      - "https://indianinfrastructure.com/category/power/feed"
+    section_urls: []
+    notes: >
+      RSS feed found 2026-08-17 (site-wide feed, not vertical-specific —
+      covers all categories, not just water/power). Switched from
+      section-page crawling to this feed since RSS is more reliable (see
+      Section 6 of the SOP). section_urls emptied deliberately: scraper.py
+      currently runs rss_feeds AND section_urls unconditionally rather
+      than treating RSS as primary-with-fallback, so leaving both
+      populated would mean redundant crawling and reintroducing the
+      category/archive-page guesswork bugs fixed on 2026-08-16, right
+      alongside clean RSS data. If the feed ever breaks, fall back to:
+        section_urls:
+          - "https://indianinfrastructure.com/category/water/"
+          - "https://indianinfrastructure.com/category/power/"
+      Since the feed is site-wide, articles outside the Water/Power
+      verticals will also come through; the classification matrix
+      pre-filter (Section 4) should still exclude anything irrelevant.
 
   - name: "CPCB Public Notices"
     verticals: ["Compliance Notices"]
@@ -41,15 +57,42 @@ sources:
     section_urls:
       - "https://cpcb.nic.in/public-notice/"
     optional: true
-    notes: "Optional per SOP Section 1. Enable once URL confirmed."
+    notes: >
+      cpcb.nic.in has an expired/invalid SSL certificate (site-side issue,
+      logged as a known condition rather than a scraper bug — see
+      scraper.py::_record_failure). The alternate domain cpcb.gov.in was
+      investigated as a replacement (2026-08-16) but rejected: its
+      robots.txt disallows automated access, and the specific page found
+      ("All EPR Portals of CPCB") is a portal directory, not a notices/news
+      feed, so it wouldn't have produced usable article data anyway. No
+      working automatable source for CPCB notices has been found yet.
+      Left enabled (as optional) in case cpcb.nic.in's certificate gets
+      fixed on their end — until then this source will just be skipped
+      and logged.
 
-  - name: "NGT Portal"
+  - name: "NGT Portal (via Indian Kanoon)"
     verticals: ["Judgments", "Orders"]
-    rss_feeds: []
-    section_urls:
-      - "https://greentribunal.gov.in/"
+    rss_feeds:
+      - "https://indiankanoon.org/feeds/latest/judgments/"
+    section_urls: []
     optional: true
-    notes: "Optional per SOP Section 1. Enable once URL confirmed."
+    notes: >
+      Switched from greentribunal.gov.in (2026-08-17): that site is a
+      static government portal with no structured article/notice feed —
+      not a workable automated source. Indian Kanoon suggested as a
+      replacement, but IMPORTANT — the URL above is their SITE-WIDE
+      "latest judgments" feed covering every Indian court, not NGT
+      specifically. It will need heavy reliance on the keyword pre-filter
+      (Section 4) and classification matrix to surface only NGT-relevant
+      items, and will likely include a lot of noise from unrelated courts.
+      RECOMMENDED FIX: Indian Kanoon supports building a scoped RSS/alert
+      feed around a specific search query (their site shows "Create
+      Alert — Get alerts for new judgments matching this query" on
+      search results, e.g. searching 'National Green Tribunal
+      doctypes:judgments'). Visit indiankanoon.org, run that search, and
+      look for a feed/alert link scoped to it — swap that URL in here in
+      place of the site-wide one above once found. Left optional since
+      even the general feed's relevance to NGT specifically is unverified.
 
 # ---------------------------------------------------------------------
 # Section 2: Agentic Scraping Workflow parameters
@@ -69,7 +112,7 @@ crawl:
 # ---------------------------------------------------------------------
 system_prompt: >
   You are an Industrial Business Intelligence Analyst. Your task is to
-  review the scraped text from the last 7 days and identify specific
+  review the scraped text from the last 14 days and identify specific
   business use cases. For each relevant article, extract: Company Name,
   Sector, Location (if mentioned), and the specific 'Pain Point' or
   'Opportunity' identified. Classify each finding into exactly one of
@@ -95,11 +138,21 @@ classification_matrix:
       water unavailability.
 
   - category: "Rapid Expansion"
-    keywords: ["Datacenter", "microelectronics", "semiconductor", "ramp-up",
-               "Capacity Expansion", "Cleanroom", "Fast-track Project", "Hyperscale"]
+    keywords: ["Datacenter", "microelectronics", "ramp-up",
+               "Cleanroom", "Fast-track Project", "Hyperscale"]
     logic: >
       Identify projects with 'stringent' or 'aggressive' execution
-      timelines.
+      timelines. IMPORTANT — only classify as "Rapid Expansion" if the
+      article ALSO mentions a water-related angle (e.g. water supply,
+      water intake, ETP/effluent treatment, demin/ultrapure water
+      requirements, water infrastructure for the project). A
+      capacity/expansion announcement with no water angle at all is
+      generic business news, not a Rapid Expansion finding for this
+      matrix — mark it NOT RELEVANT instead, even if it uses words like
+      "capacity expansion" or "semiconductor". This pairing requirement
+      exists specifically to cut down false positives from ordinary
+      expansion news that has nothing to do with water/industrial
+      utilities.
 
   - category: "Monetary Loss"
     keywords: ["Delayed commissioning", "maintenance cost", "revenue loss",
@@ -125,6 +178,13 @@ classification_matrix:
       Focus on industry with paying capacity but who look to defer on
       capital payments and prefer rental assets that can be quickly
       deployed and decommissioned with limited ownership prospects.
+      IMPORTANT — only classify as "Deferment of Capital Costs" if the
+      article ALSO involves a water-related asset or service (e.g.
+      rental water treatment plants, temporary ETP/RO/demin skids,
+      water infrastructure leasing) — not generic equipment rental or
+      financing deals with no water angle. This pairing requirement
+      exists specifically to cut down false positives from unrelated
+      rental/financing news.
 
 # ---------------------------------------------------------------------
 # Section 4: Semantic search keyword lists (used as retrieval hints /
